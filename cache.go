@@ -1,12 +1,13 @@
 package cache
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
 
 // defaultExpiration - tiempo por defecto de expiración de los datos en el caché. (una semana)
-const defaultExpiration = 168 * time.Hour
+const defaultExpiration = 7 * 24 * time.Hour
 
 type Cache struct {
 	data       map[string]cacheItem
@@ -41,14 +42,32 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 	return item.value, true
 }
 
-// Update Modifica el valor por clave.
-func (c *Cache) Update(key string, value interface{}) {
+// Add agrega un nuevo valor por clave. Devuelve un error si la clave ya existe.
+func (c *Cache) Add(key string, value interface{}) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	if _, exists := c.data[key]; exists {
+		return errors.New("key already exists")
+	}
 	c.data[key] = cacheItem{
 		value:     value,
 		timestamp: time.Now(),
 	}
+	return nil
+}
+
+// Update modifica el valor por clave. Devuelve un error si la clave no existe.
+func (c *Cache) Update(key string, value interface{}) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if _, exists := c.data[key]; !exists {
+		return errors.New("key does not exist")
+	}
+	c.data[key] = cacheItem{
+		value:     value,
+		timestamp: time.Now(),
+	}
+	return nil
 }
 
 // Check devuelve un indicador de existencia de un valor por clave.
@@ -76,12 +95,3 @@ func (c *Cache) Cleanup() {
 		}
 	}
 }
-
-// Сохранение refresh токена: Когда пользователь логинится, вы сохраняете refresh токен в кеш с помощью метода Update.
-
-// Проверка и обновление JWT токена: Когда JWT токен истекает, ваше приложение проверяет наличие refresh
-// токена в кеше с помощью метода Check и получает его с помощью метода Get. Если refresh токен все еще активен,
-// вы используете его для получения нового JWT токена и обновляете кеш.
-
-// Удаление устаревших токенов: Если refresh токен истек (например, прошло 7 дней),
-// он автоматически удаляется из кеша, и пользователю придется снова логиниться.
